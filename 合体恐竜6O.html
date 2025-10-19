@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>夢幻ysの合体恐竜ゲーム</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        :root {
+            --bg-color: #f0e8d8;
+            --container-bg: #fffbf0;
+            --container-border: #d4c8b0;
+            --text-color: #6d5d4b;
+            --accent-color: #ff7f50;
+            --accent-color-dark: #e56a3e;
+        }
+
+        body {
+            margin: 0;
+            font-family: 'Helvetica Neue', 'Arial', 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', 'Meiryo', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none; /* Disable pull-to-refresh */
+        }
+
+        .game-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 420px; /* スマートフォンに最適な幅 */
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .header {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr) auto; /* 3つの情報ボックス + サウンドボタン */
+            gap: 8px;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 0 5px;
+            box-sizing: border-box;
+            align-items: center;
+        }
+
+        .info-box {
+            background-color: var(--container-bg);
+            border: 2px solid var(--container-border);
+            border-radius: 12px;
+            padding: 5px 10px;
+            text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            min-height: 50px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .info-box h2 {
+            margin: 0 0 2px 0;
+            font-size: 11px;
+            color: var(--text-color);
+            font-weight: bold;
+        }
+
+        .info-box p {
+            margin: 0;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        #sound-toggle {
+            background: var(--container-bg);
+            border: 2px solid var(--container-border);
+            border-radius: 12px;
+            cursor: pointer;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 0;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        #sound-toggle svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--text-color);
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 10 / 12;
+            background-color: var(--container-bg);
+            border-radius: 20px;
+            border: 4px solid var(--container-border);
+            overflow: hidden;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #game-over-modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            visibility: hidden;
+            opacity: 0;
+            transition: opacity 0.3s, visibility 0.3s;
+            z-index: 100;
+        }
+
+        #game-over-modal.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
+        #game-over-modal h2 {
+            font-size: 48px;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        #final-score {
+            font-size: 24px;
+            margin: 10px 0 20px 0;
+        }
+
+        #restart-button {
+            padding: 12px 25px;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+            background-color: var(--accent-color);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        #restart-button:hover, #restart-button:active {
+            background-color: var(--accent-color-dark);
+        }
+        
+    </style>
+</head>
+<body>
+
+    <div class="game-wrapper">
+        <div class="header">
+            <div class="info-box">
+                <h2>SCORE</h2>
+                <p id="score">0</p>
+            </div>
+             <div class="info-box">
+                <h2>TIME</h2>
+                <p id="timer">60</p>
+            </div>
+            <div class="info-box">
+                <h2>HI-SCORE</h2>
+                <p id="high-score">0</p>
+            </div>
+            <button id="sound-toggle">
+                <!-- SVG icons will be injected by JS -->
+            </button>
+        </div>
+        <div id="game-container">
+            <div id="game-over-modal">
+                <h2>GAME OVER</h2>
+                <p id="final-score">SCORE: 0</p>
+                <button id="restart-button">もう一度遊ぶ</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { Engine, Render, Runner, World, Bodies, Composite, Events, Vector } = Matter;
+
+        const DINO_IMAGE_URL = 'https://raw.githubusercontent.com/kensincode/kyouryu1/main/K1.png';
+        const JAMMER_IMAGE_URL = 'https://raw.githubusercontent.com/kensincode/kyouryu1/main/manA16.png';
+        
+        const DINO_TYPES = [
+            { radius: 0.04, score: 1, timeBonus: 1, texture: '', spriteSize: null },
+            { radius: 0.055, score: 3, timeBonus: 1, texture: '', spriteSize: null },
+            { radius: 0.07, score: 6, timeBonus: 1, texture: '', spriteSize: null },
+            { radius: 0.08, score: 10, timeBonus: 2, texture: '', spriteSize: null },
+            { radius: 0.10, score: 15, timeBonus: 2, texture: '', spriteSize: null },
+            { radius: 0.12, score: 21, timeBonus: 3, texture: '', spriteSize: null },
+            { radius: 0.14, score: 28, timeBonus: 3, texture: '', spriteSize: null },
+            { radius: 0.16, score: 36, timeBonus: 4, texture: '', spriteSize: null },
+            { radius: 0.18, score: 45, timeBonus: 5, texture: '', spriteSize: null }, // Lv 9
+            { radius: 0.20, score: 55, timeBonus: 6, texture: '', spriteSize: null }, // Lv 10
+            { radius: 0.22, score: 66, timeBonus: 7, texture: '', spriteSize: null }  // Lv 11 (最大)
+        ];
+
+        let engine, render, runner, world;
+        let score = 0, highScore = 0, timeLeft = 60, mergeCount = 0;
+        let currentDino = null, nextDinoTypeIndex = 0;
+        let canDrop = true, gameOver = false;
+        let timerInterval;
+        let jammerChars = [];
+        let JAMMER_SPRITES = [];
+
+        // Audio
+        let isMuted = false;
+        let isAudioReady = false;
+        let mergeSynth, dropSynth, gameOverSynth, bgMusicLoop;
+
+        const gameContainer = document.getElementById('game-container');
+        const scoreElement = document.getElementById('score');
+        const timerElement = document.getElementById('timer');
+        const highScoreElement = document.getElementById('high-score');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const finalScoreElement = document.getElementById('final-score');
+        const restartButton = document.getElementById('restart-button');
+        const soundToggleButton = document.getElementById('sound-toggle');
+
+        const soundOnIcon = `<svg viewBox="0 0 24 24"><path d="M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z" /></svg>`;
+        const soundOffIcon = `<svg viewBox="0 0 24 24"><path d="M12,4L7,9H3V15H7L12,20V4M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M19,12C19,15.17 16.89,17.85 14,18.71V20.77C18,19.86 21,16.28 21,7.72C18,4.14 14,3.23V5.29C16.89,6.15 19,8.83 19,12Z" /></svg>`;
+
+
+        let width, height, WALL_THICKNESS = 30, GAME_OVER_LINE_Y;
+
+        function loadAssetsAndSetupGame() {
+            const dinoImage = new Image();
+            dinoImage.crossOrigin = "Anonymous";
+            dinoImage.src = DINO_IMAGE_URL;
+
+            const jammerImage = new Image();
+            jammerImage.crossOrigin = "Anonymous";
+            jammerImage.src = JAMMER_IMAGE_URL;
+
+            let imagesLoaded = 0;
+            const totalImages = 2;
+
+            const onAssetLoad = () => {
+                imagesLoaded++;
+                if (imagesLoaded === totalImages) {
+                    initGame();
+                }
+            };
+
+            dinoImage.onload = () => {
+                const cols = 4, rows = 4, spriteWidth = dinoImage.width / cols, spriteHeight = dinoImage.height / rows;
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = spriteWidth; canvas.height = spriteHeight;
+                let dinoIndex = 0;
+                for (let i = 0; i < rows && dinoIndex < DINO_TYPES.length; i++) {
+                    for (let j = 0; j < cols && dinoIndex < DINO_TYPES.length; j++) {
+                        ctx.clearRect(0, 0, spriteWidth, spriteHeight);
+                        ctx.drawImage(dinoImage, j * spriteWidth, i * spriteHeight, spriteWidth, spriteHeight, 0, 0, spriteWidth, spriteHeight);
+                        DINO_TYPES[dinoIndex].texture = canvas.toDataURL();
+                        DINO_TYPES[dinoIndex].spriteSize = { width: spriteWidth, height: spriteHeight };
+                        dinoIndex++;
+                    }
+                }
+                onAssetLoad();
+            };
+            
+            jammerImage.onload = () => {
+                const cols = 4, rows = 4, spriteWidth = jammerImage.width / cols, spriteHeight = jammerImage.height / rows;
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = spriteWidth; canvas.height = spriteHeight;
+                for (let i = 0; i < rows; i++) {
+                    for (let j = 0; j < cols; j++) {
+                         ctx.clearRect(0, 0, spriteWidth, spriteHeight);
+                        ctx.drawImage(jammerImage, j * spriteWidth, i * spriteHeight, spriteWidth, spriteHeight, 0, 0, spriteWidth, spriteHeight);
+                        JAMMER_SPRITES.push({
+                            texture: canvas.toDataURL(),
+                            spriteSize: { width: spriteWidth, height: spriteHeight }
+                        });
+                    }
+                }
+                onAssetLoad();
+            };
+
+            dinoImage.onerror = () => console.error(`恐竜画像の読み込み失敗: ${DINO_IMAGE_URL}`);
+            jammerImage.onerror = () => console.error(`お邪魔キャラ画像の読み込み失敗: ${JAMMER_IMAGE_URL}`);
+        }
+        
+        // --- Audio Functions ---
+        function setupAudio() {
+            mergeSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "fmsine" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.2 },
+            }).toDestination();
+            dropSynth = new Tone.MembraneSynth({ pitchDecay: 0.01, octaves: 2, envelope: { attack: 0.001, decay: 0.2, sustain: 0 } }).toDestination();
+            gameOverSynth = new Tone.MembraneSynth({ pitchDecay: 0.05, octaves: 5, envelope: { attack: 0.01, decay: 0.8, sustain: 0 } }).toDestination();
+            
+            // ポップなBGMに変更
+            const bgSynth = new Tone.FMSynth({
+                harmonicity: 2,
+                modulationIndex: 10,
+                envelope: { attack: 0.01, decay: 0.3, release: 0.5 },
+                modulationEnvelope: { attack: 0.01, decay: 0.2, release: 0.5 }
+            }).toDestination();
+            bgSynth.volume.value = -12; // 少し音量を下げる
+
+            const notes = ["C4", "E4", "G4", "C5", "G4", "E4"];
+            let noteIndex = 0;
+            bgMusicLoop = new Tone.Sequence((time, note) => {
+                bgSynth.triggerAttackRelease(note, "16n", time);
+            }, notes, "8n").start(0);
+            
+            Tone.Transport.bpm.value = 130; // テンポを少し上げる
+
+            isAudioReady = true;
+            if(!isMuted) Tone.Transport.start();
+        }
+
+        function toggleSound() {
+            isMuted = !isMuted;
+            localStorage.setItem('dinoMergeMuted', isMuted ? '1' : '0');
+            updateSoundButton();
+            if (!isAudioReady) return;
+            
+            if (isMuted) {
+                Tone.Transport.pause();
+            } else {
+                if (Tone.context.state !== 'running') {
+                    Tone.start();
+                }
+                Tone.Transport.start();
+            }
+        }
+
+        function updateSoundButton() {
+            soundToggleButton.innerHTML = isMuted ? soundOffIcon.replace('12Z" />', '12M4.27,9L3,10.27L8.73,16L10,14.73L4.27,9M19.73,11L21,12.27L15.27,18L14,16.73L19.73,11Z" />') : soundOnIcon;
+        }
+
+        // --- Game Logic ---
+        function loadSettings() {
+            highScore = localStorage.getItem('dinoMergeHighScore') || 0;
+            highScoreElement.innerText = highScore;
+            isMuted = localStorage.getItem('dinoMergeMuted') === '1';
+            updateSoundButton();
+        }
+
+        function saveHighScore() {
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('dinoMergeHighScore', highScore);
+                highScoreElement.innerText = highScore;
+            }
+        }
+        
+        function startTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerElement.innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    triggerGameOver();
+                }
+            }, 1000);
+        }
+
+        function initGame() {
+            width = gameContainer.clientWidth;
+            height = gameContainer.clientHeight;
+            GAME_OVER_LINE_Y = height * 0.15;
+            engine = Engine.create();
+            world = engine.world;
+            world.gravity.y = 1;
+            render = Render.create({ element: gameContainer, engine: engine, options: { width, height, wireframes: false, background: 'transparent' } });
+            runner = Runner.create();
+            const ground = Bodies.rectangle(width / 2, height + WALL_THICKNESS / 2, width, WALL_THICKNESS, { isStatic: true, label: 'wall' });
+            const leftWall = Bodies.rectangle(-WALL_THICKNESS / 2, height / 2, WALL_THICKNESS, height, { isStatic: true, label: 'wall' });
+            const rightWall = Bodies.rectangle(width + WALL_THICKNESS / 2, height / 2, WALL_THICKNESS, height, { isStatic: true, label: 'wall' });
+            World.add(world, [ground, leftWall, rightWall]);
+            score = 0; timeLeft = 60; mergeCount = 0; jammerChars = []; gameOver = false; canDrop = true;
+            updateScore();
+            timerElement.innerText = timeLeft;
+            gameOverModal.classList.remove('show');
+            startTimer();
+            prepareNextDino();
+            spawnCurrentDino();
+            setupControls();
+            setupCollisionHandling();
+            setupGameOverCheck();
+            Render.run(render);
+            Runner.run(runner, engine);
+            if(isAudioReady && !isMuted) Tone.Transport.start();
+        }
+
+        function prepareNextDino() {
+            nextDinoTypeIndex = Math.floor(Math.random() * 4);
+        }
+        
+        function spawnCurrentDino() {
+            if (gameOver) return;
+            const typeIndex = nextDinoTypeIndex;
+            const dinoData = DINO_TYPES[typeIndex];
+            const radius = dinoData.radius * Math.min(width, height);
+            const spriteSize = dinoData.spriteSize;
+            currentDino = Bodies.circle(width / 2, radius * 1.5, radius, {
+                isStatic: true, restitution: 0.3, friction: 0.5, label: `dino_${typeIndex}`,
+                render: { sprite: { texture: dinoData.texture, xScale: (radius * 2) / spriteSize.width, yScale: (radius * 2) / spriteSize.height } }
+            });
+            World.add(world, currentDino);
+            prepareNextDino();
+        }
+
+        async function dropDino() {
+            if (currentDino && canDrop) {
+                if (Tone.context.state !== 'running') {
+                    await Tone.start();
+                    console.log('Audio context started');
+                    setupAudio();
+                }
+                
+                // awaitの後にゲームの状態が変化(ゲームオーバーなど)している可能性があるため、
+                // currentDinoがまだ存在するかを再確認します。
+                if (!currentDino) return;
+
+                if(isAudioReady && !isMuted) dropSynth.triggerAttackRelease("C2", "8n");
+                
+                canDrop = false;
+                Matter.Body.setStatic(currentDino, false);
+                currentDino = null;
+                setTimeout(() => {
+                    canDrop = true;
+                    if (!gameOver) spawnCurrentDino();
+                }, 500);
+            }
+        }
+
+        function setupControls() {
+             let isDragging = false;
+            const moveHandler = (e) => {
+                if (currentDino && !gameOver) {
+                    const bounds = gameContainer.getBoundingClientRect();
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    let x = clientX - bounds.left;
+                    const radius = currentDino.circleRadius;
+                    x = Math.max(radius, Math.min(width - radius, x));
+                    Matter.Body.setPosition(currentDino, { x: x, y: currentDino.position.y });
+                }
+            };
+            const startHandler = (e) => { e.preventDefault(); isDragging = true; moveHandler(e); };
+            const endHandler = (e) => { e.preventDefault(); if(isDragging) { dropDino(); isDragging = false; } };
+            gameContainer.addEventListener('mousedown', startHandler);
+            gameContainer.addEventListener('mousemove', (e) => { if(isDragging) moveHandler(e); });
+            gameContainer.addEventListener('mouseup', endHandler);
+            gameContainer.addEventListener('mouseleave', () => { if (isDragging) { dropDino(); isDragging = false; }});
+            gameContainer.addEventListener('touchstart', startHandler, { passive: false });
+            gameContainer.addEventListener('touchmove', moveHandler, { passive: false });
+            gameContainer.addEventListener('touchend', endHandler);
+        }
+
+        function setupCollisionHandling() {
+            Events.on(engine, 'collisionStart', (event) => {
+                if (gameOver) return;
+                event.pairs.forEach(pair => {
+                    const { bodyA, bodyB } = pair;
+                    if (bodyA.label.startsWith('dino_') && bodyA.label === bodyB.label) {
+                        const typeIndex = parseInt(bodyA.label.split('_')[1]);
+                        if (typeIndex < DINO_TYPES.length - 1) {
+                             if(isAudioReady && !isMuted) mergeSynth.triggerAttackRelease(["C4", "E4", "G4"], 0.2);
+                            World.remove(world, [bodyA, bodyB]);
+                            const nextTypeIndex = typeIndex + 1;
+                            const dinoData = DINO_TYPES[nextTypeIndex];
+                            const radius = dinoData.radius * Math.min(width, height);
+                            const spriteSize = dinoData.spriteSize;
+                            const newPosition = { x: (bodyA.position.x + bodyB.position.x) / 2, y: (bodyA.position.y + bodyB.position.y) / 2 };
+                            const newDino = Bodies.circle(newPosition.x, newPosition.y, radius, {
+                                restitution: 0.3, friction: 0.5, label: `dino_${nextTypeIndex}`,
+                                render: { sprite: { texture: dinoData.texture, xScale: (radius * 2) / spriteSize.width, yScale: (radius * 2) / spriteSize.height } }
+                            });
+                            World.add(world, newDino);
+                            score += dinoData.score;
+                            updateScore();
+                            timeLeft += dinoData.timeBonus;
+                            timerElement.innerText = timeLeft;
+                            mergeCount++;
+                            if (mergeCount > 0 && mergeCount % 10 === 0) spawnJammerChar();
+                            if (nextTypeIndex >= 8) removeJammerChar();
+                        }
+                    }
+                });
+            });
+        }
+        
+        function spawnJammerChar() {
+            if(JAMMER_SPRITES.length === 0) return;
+            
+            const spriteIndex = Math.floor(Math.random() * JAMMER_SPRITES.length);
+            const jammerData = JAMMER_SPRITES[spriteIndex];
+
+            const baseSize = width * 0.08;
+            const sizeVariance = Math.random() * 0.05; // 0% to 5% variance
+            const jammerWidth = baseSize + baseSize * sizeVariance;
+            const jammerHeight = jammerWidth * (jammerData.spriteSize.height / jammerData.spriteSize.width);
+
+            const jammer = Bodies.rectangle(width / 2, height * 0.5, jammerWidth, jammerHeight, {
+                label: 'jammer', restitution: 1, friction: 0, frictionAir: 0, inertia: Infinity,
+                render: {
+                    sprite: {
+                        texture: jammerData.texture,
+                        xScale: jammerWidth / jammerData.spriteSize.width,
+                        yScale: jammerHeight / jammerData.spriteSize.height,
+                    }
+                }
+            });
+            Matter.Body.setVelocity(jammer, { x: (Math.random() - 0.5) * 6, y: (Math.random() - 0.5) * 6 });
+            World.add(world, jammer);
+            jammerChars.push(jammer);
+        }
+
+        function removeJammerChar() {
+            if (jammerChars.length > 0) {
+                const jammerToRemove = jammerChars.shift();
+                World.remove(world, jammerToRemove);
+            }
+        }
+        
+        function setupGameOverCheck() {
+             let lastCheckTime = 0;
+             Events.on(engine, 'afterUpdate', (event) => {
+                if(gameOver) return;
+                if(event.timestamp - lastCheckTime < 500) return;
+                lastCheckTime = event.timestamp;
+                const bodies = Composite.allBodies(world);
+                for (let body of bodies) {
+                    if (body.label.startsWith('dino_') && !body.isStatic) {
+                        if (body.position.y - body.circleRadius < GAME_OVER_LINE_Y && body.speed < 0.1) {
+                            triggerGameOver();
+                            return;
+                        }
+                    }
+                }
+            });
+        }
+        
+        function triggerGameOver() {
+            if (gameOver) return;
+            gameOver = true;
+            canDrop = false;
+            clearInterval(timerInterval);
+            if (currentDino) World.remove(world, currentDino);
+            currentDino = null;
+            if(isAudioReady && !isMuted) {
+                Tone.Transport.pause();
+                gameOverSynth.triggerAttackRelease("C1", "1n");
+            }
+            saveHighScore();
+            finalScoreElement.innerText = `SCORE: ${score}`;
+            gameOverModal.classList.add('show');
+            Runner.stop(runner);
+            Render.stop(render);
+        }
+        
+        function restartGame() {
+            World.clear(world, false);
+            Composite.clear(world, false, true);
+            Engine.clear(engine);
+            render.canvas.remove();
+            initGame();
+        }
+
+        function updateScore() {
+            scoreElement.innerText = score;
+        }
+
+        restartButton.addEventListener('click', restartGame);
+        soundToggleButton.addEventListener('click', toggleSound);
+
+        window.onload = () => {
+            loadSettings();
+            loadAssetsAndSetupGame();
+        };
+        window.addEventListener('resize', () => { location.reload(); });
+    </script>
+</body>
+</html>
+
